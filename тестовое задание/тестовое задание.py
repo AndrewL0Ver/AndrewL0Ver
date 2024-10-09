@@ -111,3 +111,99 @@ CREATE TABLE grpc_data (
     RecordTimestamp TIMESTAMP,
     PRIMARY KEY (PacketSeqNum, RecordSeqNum)
 );
+# Используем базовый образ Python
+FROM python:3.10-slim
+
+# Копируем файлы
+WORKDIR /app
+COPY server.py .
+COPY data.proto .
+
+# Устанавливаем зависимости
+RUN pip install grpcio grpcio-tools psycopg2-binary
+
+# Компилируем gRPC код
+RUN python -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. data.proto
+
+# Запускаем сервер
+CMD ["python", "server.py"]
+# Используем базовый образ Python
+FROM python:3.10-slim
+
+# Копируем файлы
+WORKDIR /app
+COPY client.py .
+COPY data.proto .
+
+# Устанавливаем зависимости
+RUN pip install grpcio grpcio-tools
+
+# Компилируем gRPC код
+RUN python -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. data.proto
+
+# Запускаем клиента
+CMD ["python", "client.py"]
+version: '3.7'
+
+services:
+  db:
+    image: postgres:14
+    environment:
+      POSTGRES_DB: grpc_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - grpc_network
+
+  server:
+    build: ./server
+    depends_on:
+      - db
+    networks:
+      - grpc_network
+
+  client:
+    build: ./client
+    depends_on:
+      - server
+    networks:
+      - grpc_network
+
+networks:
+  grpc_network:
+
+volumes:
+  postgres_data:
+/grpc_docker_project
+    ├── server
+    │   ├── Dockerfile
+    │   ├── server.py
+    │   └── data.proto
+    ├── client
+    │   ├── Dockerfile
+    │   ├── client.py
+    └── docker-compose.yml
+syntax = "proto3";
+
+message Data {
+    float Decimal1 = 1;
+    float Decimal2 = 2;
+    float Decimal3 = 3;
+    float Decimal4 = 4;
+    string RecordTimestamp = 5;
+}
+
+message DataPacket {
+    string PacketTimestamp = 1;
+    int32 PacketSeqNum = 2;
+    int32 NRecords = 3;
+    repeated Data PacketData = 4;
+}
+
+service DataService {
+    rpc SendData (DataPacket) returns (google.protobuf.Empty);
+}
+
+import "google/protobuf/empty.proto";
